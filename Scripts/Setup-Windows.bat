@@ -2,6 +2,9 @@
 echo Initializing submodules...
 git submodule update --init --recursive
 
+cd ..
+echo Switched to repo root: %CD%
+
 echo Creating build directory...
 mkdir build
 cd build
