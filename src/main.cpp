@@ -1,5 +1,6 @@
 #include <iostream>
 #include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_video.h>
 #include "Exception.h"
 
 int main(int argc, char* args[])
@@ -12,7 +13,7 @@ int main(int argc, char* args[])
     }
 
 	SDL_Window* window = SDL_CreateWindow(
-        "SDL Window",width, height, 0);
+        "SDL Window",width, height,SDL_WINDOW_RESIZABLE);
     if(!window) {
         throw dbg::SDL_Exception("Failed to create window");
 	}
@@ -30,7 +31,6 @@ int main(int argc, char* args[])
 
     SDL_Event event;
 	bool running = true;
-    
 	// !Game loop
     while(running) {
 		// !Handle events
@@ -40,12 +40,43 @@ int main(int argc, char* args[])
             case SDL_EVENT_QUIT:
 				running = false;
                 break;
+			case SDL_EVENT_WINDOW_RESIZED:
+				// Handle window resize event
+                break;
             default: break;
             }
         }
+        // Set command buffer for GPU device
+		SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+        if (!commandBuffer) {
+            throw dbg::SDL_Exception("Failed to acquire GPU command buffer");
+		}
+
+        // Create a swapchain of textures
+        SDL_GPUTexture* swapchain;
+        if (!SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, window, &swapchain, nullptr, nullptr))
+        {
+			throw dbg::SDL_Exception("Failed to acquire swapchain texture");
+        }
+       
+        if (swapchain != nullptr)
+        {
+			SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
+            colorTargetInfo.texture = swapchain;
+			colorTargetInfo.clear_color.r = 0.3f;
+			colorTargetInfo.clear_color.g = 0.4f;
+			colorTargetInfo.clear_color.b = 0.5f;
+			colorTargetInfo.clear_color.a = 1.0f;
+            colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+            colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo,
+                1, nullptr);
+			SDL_EndGPURenderPass(renderPass);
+        }
+		SDL_SubmitGPUCommandBuffer(commandBuffer);
 	}
 
-
+	SDL_DestroyGPUDevice(gpuDevice);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 
