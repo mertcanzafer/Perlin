@@ -2,6 +2,16 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_video.h>
 #include "Exception.h"
+#include <array>
+#include <string>
+
+SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
+    std::string& shaderFileName,
+    Uint32 sampleCount,
+    Uint32 uniformBufferCount,
+    Uint32 storageBufferCount,
+    Uint32 storageTextureCount);
+
 
 int main(int argc, char* args[])
 {
@@ -26,6 +36,8 @@ int main(int argc, char* args[])
     {
 		throw dbg::SDL_Exception("Failed to claim window for GPU device");
     }
+
+	//std::clog << "Using GPU device: " << SDL_GetGPUDeviceDriver(gpuDevice) << std::endl;
 
 	SDL_ShowWindow(window);
 
@@ -61,24 +73,77 @@ int main(int argc, char* args[])
        
         if (swapchain != nullptr)
         {
-			SDL_GPUColorTargetInfo colorTargetInfo = { 0 };
-            colorTargetInfo.texture = swapchain;
-			colorTargetInfo.clear_color.r = 0.3f;
-			colorTargetInfo.clear_color.g = 0.4f;
-			colorTargetInfo.clear_color.b = 0.5f;
-			colorTargetInfo.clear_color.a = 1.0f;
-            colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-            colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
-            SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo,
-                1, nullptr);
+            std::array<SDL_GPUColorTargetInfo, 1> colorTargetInfos{};
+            colorTargetInfos[0].texture = swapchain;
+			colorTargetInfos[0].clear_color.r = 0.3f;
+			colorTargetInfos[0].clear_color.g = 0.4f;
+			colorTargetInfos[0].clear_color.b = 0.5f;
+			colorTargetInfos[0].clear_color.a = 1.0f;
+            colorTargetInfos[0].load_op = SDL_GPU_LOADOP_CLEAR;
+            colorTargetInfos[0].store_op = SDL_GPU_STOREOP_STORE;
+
+            SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer,colorTargetInfos.data(),
+                (Uint32)colorTargetInfos.size(), nullptr);
 			SDL_EndGPURenderPass(renderPass);
         }
-		SDL_SubmitGPUCommandBuffer(commandBuffer);
+
+        if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
+        {
+			throw dbg::SDL_Exception("Failed to submit GPU command buffer");
+        }
 	}
 
-	SDL_DestroyGPUDevice(gpuDevice);
-	SDL_DestroyWindow(window);
+	SDL_ReleaseWindowFromGPUDevice(gpuDevice, window);
+    SDL_DestroyWindow(window);
+    SDL_DestroyGPUDevice(gpuDevice);
 	SDL_Quit();
 
     return 0;
 }
+
+//SDL_GPUShader* LoadShader
+//(
+//    SDL_GPUDevice* device, std::string& shaderFileName, Uint32 sampleCount, Uint32 uniformBufferCount, 
+//    Uint32 storageBufferCount, Uint32 storageTextureCount)
+//{
+//    // Auto-detect the shader stage from the file name for convenience
+//    SDL_GPUShaderStage stage{};
+//    if(SDL_strstr(shaderFileName.c_str(), ".vert"))
+//    {
+//        stage = SDL_GPU_SHADERSTAGE_VERTEX;
+//    }
+//    else if(SDL_strstr(shaderFileName.c_str(), ".frag"))
+//    {
+//        stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+//    }
+//    else
+//    {
+//        throw dbg::SDL_Exception("Unsupported shader file extension");
+//	}
+//
+//	char fullPath[256] = { 0 };
+//	SDL_GPUShaderFormat backendFormat = SDL_GetGPUShaderFormats(device);
+//    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
+//
+//	const char* entrypoint = nullptr;
+//    if(backendFormat & SDL_GPU_SHADERFORMAT_SPIRV)
+//    {
+//        format = SDL_GPU_SHADERFORMAT_SPIRV;
+//        entrypoint = "main";
+//    }
+//    else if (backendFormat & SDL_GPU_SHADERFORMAT_DXIL)
+//    {
+//        format = SDL_GPU_SHADERFORMAT_DXIL;
+//        entrypoint = "main";
+//    }
+//    else if (backendFormat & SDL_GPU_SHADERFORMAT_MSL)
+//    {
+//        format = SDL_GPU_SHADERFORMAT_MSL;
+//        entrypoint = "main0";
+//    }
+//    else
+//    {
+//		throw dbg::SDL_Exception("No supported shader formats found");
+//
+//    return nullptr;
+//}
