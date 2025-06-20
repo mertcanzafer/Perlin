@@ -101,49 +101,86 @@ int main(int argc, char* args[])
     return 0;
 }
 
-//SDL_GPUShader* LoadShader
-//(
-//    SDL_GPUDevice* device, std::string& shaderFileName, Uint32 sampleCount, Uint32 uniformBufferCount, 
-//    Uint32 storageBufferCount, Uint32 storageTextureCount)
-//{
-//    // Auto-detect the shader stage from the file name for convenience
-//    SDL_GPUShaderStage stage{};
-//    if(SDL_strstr(shaderFileName.c_str(), ".vert"))
-//    {
-//        stage = SDL_GPU_SHADERSTAGE_VERTEX;
-//    }
-//    else if(SDL_strstr(shaderFileName.c_str(), ".frag"))
-//    {
-//        stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-//    }
-//    else
-//    {
-//        throw dbg::SDL_Exception("Unsupported shader file extension");
-//	}
-//
-//	char fullPath[256] = { 0 };
-//	SDL_GPUShaderFormat backendFormat = SDL_GetGPUShaderFormats(device);
-//    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
-//
-//	const char* entrypoint = nullptr;
-//    if(backendFormat & SDL_GPU_SHADERFORMAT_SPIRV)
-//    {
-//        format = SDL_GPU_SHADERFORMAT_SPIRV;
-//        entrypoint = "main";
-//    }
-//    else if (backendFormat & SDL_GPU_SHADERFORMAT_DXIL)
-//    {
-//        format = SDL_GPU_SHADERFORMAT_DXIL;
-//        entrypoint = "main";
-//    }
-//    else if (backendFormat & SDL_GPU_SHADERFORMAT_MSL)
-//    {
-//        format = SDL_GPU_SHADERFORMAT_MSL;
-//        entrypoint = "main0";
-//    }
-//    else
-//    {
-//		throw dbg::SDL_Exception("No supported shader formats found");
-//
-//    return nullptr;
-//}
+SDL_GPUShader* LoadShader
+(
+    SDL_GPUDevice* device, std::string& shaderFileName, Uint32 sampleCount, Uint32 uniformBufferCount, 
+    Uint32 storageBufferCount, Uint32 storageTextureCount)
+{
+    // Auto-detect the shader stage from the file name for convenience
+    SDL_GPUShaderStage stage{};
+    if(SDL_strstr(shaderFileName.c_str(), ".vert"))
+    {
+        stage = SDL_GPU_SHADERSTAGE_VERTEX;
+    }
+    else if(SDL_strstr(shaderFileName.c_str(), ".frag"))
+    {
+        stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    }
+    else
+    {
+        throw dbg::SDL_Exception("Unsupported shader file extension");
+	}
+
+	char fullPath[256] = { 0 };
+	SDL_GPUShaderFormat backendFormat = SDL_GetGPUShaderFormats(device);
+    SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
+
+	const char* entrypoint = nullptr;
+    if(backendFormat & SDL_GPU_SHADERFORMAT_SPIRV)
+    {
+		SDL_snprintf(fullPath, sizeof(fullPath), "%sContent/Shaders/Compiled/SPIRV/%s.spv", BasePath, shaderFileName.c_str());
+        format = SDL_GPU_SHADERFORMAT_SPIRV;
+        entrypoint = "main";
+    }
+    else if (backendFormat & SDL_GPU_SHADERFORMAT_DXIL)
+    {
+        SDL_snprintf(fullPath, sizeof(fullPath), "%sContent/Shaders/Compiled/DXIL/%s.dxil", BasePath, shaderFileName.c_str());
+        format = SDL_GPU_SHADERFORMAT_DXIL;
+        entrypoint = "main";
+    }
+    else if (backendFormat & SDL_GPU_SHADERFORMAT_MSL)
+    {
+        SDL_snprintf(fullPath, sizeof(fullPath), "%sContent/Shaders/Compiled/MSL/%s.msl", BasePath, shaderFileName.c_str());
+        format = SDL_GPU_SHADERFORMAT_MSL;
+        entrypoint = "main0";
+    }
+    else
+    {
+		SDL_Log("Unsupported shader format for device: %s", SDL_GetGPUDeviceDriver(device));
+		return nullptr;
+    }
+
+    size_t codeSize{ 0u };
+	void* code = SDL_LoadFile(fullPath, &codeSize);
+
+    if (code == nullptr)
+    {
+		SDL_Log("Failed to load shader file: %s", fullPath);
+        return nullptr;
+    }
+
+	SDL_GPUShaderCreateInfo shaderCreateInfo{};
+
+    shaderCreateInfo.code = (Uint8*)code;
+	shaderCreateInfo.code_size = codeSize;
+    shaderCreateInfo.entrypoint = entrypoint;
+	shaderCreateInfo.format = format;
+	shaderCreateInfo.stage = stage;
+    shaderCreateInfo.num_samplers = sampleCount;
+	shaderCreateInfo.num_uniform_buffers = uniformBufferCount;
+	shaderCreateInfo.num_storage_buffers = storageBufferCount;
+	shaderCreateInfo.num_storage_textures = storageTextureCount;
+
+	SDL_GPUShader* shader = SDL_CreateGPUShader(device, &shaderCreateInfo);
+
+    if (!shader)
+    {
+		SDL_Log("Failed to create shader from file: %s", fullPath);
+        SDL_free(code);
+		return nullptr;
+    }
+
+	SDL_free(code);
+
+    return shader;
+}
