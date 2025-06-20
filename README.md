@@ -1,4 +1,12 @@
 # Perlin
+## ⚠️ **Prerequisites:**
+- Keep in mind that I will be using graphics pipeline in this project. Therefore, make sure that you have one of the SDKs that SDL3 uses for its rendering backend. Vulkan (SDK) or DirectX (SDK).
+- Download Vulkan SDK: (https://www.lunarg.com/vulkan-sdk/)
+- Download DirectX SDK: (https://www.microsoft.com/en-us/download/details.aspx?id=6812)
+  
+**Note: If you do not work on Windows, then there is no problem. You can have Vulkan SDK that works on both Windows and Linux, a cross platform API**
+
+
 ## How to Build
 
 1. Clone the repository
