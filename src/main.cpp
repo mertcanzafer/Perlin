@@ -1,9 +1,12 @@
 #include <iostream>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_video.h>
+
 #include "Exception.h"
 #include <array>
 #include <string>
+#include <vector>
+#include <fstream>
 
 SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
     std::string& shaderFileName,
@@ -13,10 +16,15 @@ SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
     Uint32 storageTextureCount);
 
 
+const char* BasePath = nullptr;
+
+void InitializeAssetLoader();
+
 int main(int argc, char* args[])
 {
     const unsigned int width = 800u;
 	const unsigned int height = 600u;
+	InitializeAssetLoader();
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		throw dbg::SDL_Exception("Failed to initialize SDL");
@@ -38,6 +46,41 @@ int main(int argc, char* args[])
     }
 
 	//std::clog << "Using GPU device: " << SDL_GetGPUDeviceDriver(gpuDevice) << std::endl;
+
+	SDL_GPUShader* vertexShader = LoadShader(gpuDevice, std::string("RawTriangle.vert"), 0, 0, 0, 0);
+
+    if (!vertexShader) {
+		throw dbg::SDL_Exception("Failed to load shader");
+    }
+
+	SDL_GPUShader* fragmentShader = LoadShader(gpuDevice, std::string("SolidColor.frag"), 0, 0, 0, 0);
+
+    if(!fragmentShader) {
+        throw dbg::SDL_Exception("Failed to load fragment shader");
+	}
+
+    //! Create the pipelines
+    
+    std::vector<SDL_GPUColorTargetDescription> colorTargetDescriptions(1);
+
+    colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
+
+    SDL_GPUGraphicsPipelineTargetInfo targetInfo{};
+    targetInfo.num_color_targets = 1;
+    targetInfo.color_target_descriptions = colorTargetDescriptions.data();
+   
+
+	SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo{};
+	pipelineCreateInfo.fragment_shader = fragmentShader;
+	pipelineCreateInfo.vertex_shader = vertexShader;
+	pipelineCreateInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pipelineCreateInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    pipelineCreateInfo.target_info = targetInfo;
+
+    SDL_GPUGraphicsPipeline* pipeline{ SDL_CreateGPUGraphicsPipeline(gpuDevice,&pipelineCreateInfo)};
+	if (!pipeline) {
+        throw dbg::SDL_Exception("Failed to create graphics pipeline");
+    }
 
 	SDL_ShowWindow(window);
 
@@ -84,6 +127,10 @@ int main(int argc, char* args[])
 
             SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer,colorTargetInfos.data(),
                 (Uint32)colorTargetInfos.size(), nullptr);
+
+            SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+            SDL_DrawGPUPrimitives(renderPass, 3u, 1u, 0u, 0u);
+
 			SDL_EndGPURenderPass(renderPass);
         }
 
@@ -95,6 +142,10 @@ int main(int argc, char* args[])
 
 	SDL_ReleaseWindowFromGPUDevice(gpuDevice, window);
     SDL_DestroyWindow(window);
+
+	SDL_ReleaseGPUShader(gpuDevice,vertexShader);
+	SDL_ReleaseGPUShader(gpuDevice,fragmentShader);
+    SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
     SDL_DestroyGPUDevice(gpuDevice);
 	SDL_Quit();
 
@@ -126,6 +177,7 @@ SDL_GPUShader* LoadShader
     SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_INVALID;
 
 	const char* entrypoint = nullptr;
+
     if(backendFormat & SDL_GPU_SHADERFORMAT_SPIRV)
     {
 		SDL_snprintf(fullPath, sizeof(fullPath), "%sContent/Shaders/Compiled/SPIRV/%s.spv", BasePath, shaderFileName.c_str());
@@ -150,18 +202,31 @@ SDL_GPUShader* LoadShader
 		return nullptr;
     }
 
-    size_t codeSize{ 0u };
-	void* code = SDL_LoadFile(fullPath, &codeSize);
-
-    if (code == nullptr)
+    std::ifstream shaderFile{ fullPath,std::ios::binary | std::ios::ate };
+    if (!shaderFile)
     {
-		SDL_Log("Failed to load shader file: %s", fullPath);
+		SDL_Log("Failed to open shader file: %s", fullPath);
         return nullptr;
+    }
+
+    std::streamsize codeSize = shaderFile.tellg();
+    if (codeSize <= 0)
+    {
+        SDL_Log("Shader file is empty or could not determine size: %s", fullPath);
+		return nullptr;
+    }
+
+	shaderFile.seekg(0, std::ios::beg);
+	std::vector<char> code(codeSize);
+    if (!shaderFile.read(code.data(), codeSize))
+    {
+		SDL_Log("Failed to read shader file: %s", fullPath);
+		return nullptr;
     }
 
 	SDL_GPUShaderCreateInfo shaderCreateInfo{};
 
-    shaderCreateInfo.code = (Uint8*)code;
+    shaderCreateInfo.code = (Uint8*)code.data();
 	shaderCreateInfo.code_size = codeSize;
     shaderCreateInfo.entrypoint = entrypoint;
 	shaderCreateInfo.format = format;
@@ -176,11 +241,13 @@ SDL_GPUShader* LoadShader
     if (!shader)
     {
 		SDL_Log("Failed to create shader from file: %s", fullPath);
-        SDL_free(code);
 		return nullptr;
     }
 
-	SDL_free(code);
-
     return shader;
+}
+
+void InitializeAssetLoader()
+{
+	BasePath = SDL_GetBasePath();
 }
