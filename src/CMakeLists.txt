@@ -3,10 +3,12 @@
 set(SOURCES
     main.cpp
     Exception.cpp
+    App.cpp
 )
 
 set(HEADERS
     Exception.h
+    App.h
 )
 
 # Create your game executable target and put everything to executable
