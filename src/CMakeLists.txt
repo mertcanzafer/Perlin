@@ -17,6 +17,9 @@ add_executable(PerlinSDL ${SOURCES} ${HEADERS})
 # Link to the actual SDL3 library
 target_link_libraries(PerlinSDL PRIVATE SDL3::SDL3)
 
+# Link to glm headers
+target_link_libraries(PerlinSDL PRIVATE glm::glm)
+
 # Copy the content folder to output dir.
 add_custom_command(TARGET PerlinSDL POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
