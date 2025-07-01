@@ -9,6 +9,8 @@
 #include <fstream>
 #include <sstream>
 
+#include <glm\vec3.hpp>
+
 class App
 {
 public:

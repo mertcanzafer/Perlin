@@ -44,7 +44,7 @@ void App::InitSDL()
 	}
 
 	// Set the shaders
-	m_VertexShader = LoadShader(m_Device, std::string("RawTriangle.vert"), 0, 0, 0, 0);
+	m_VertexShader = LoadShader(m_Device, std::string("PositionColor.vert"), 0, 0, 0, 0);
 
 	if (!m_VertexShader) {
 		throw dbg::SDL_Exception("Failed to load shader");
@@ -94,12 +94,31 @@ void App::OnCreate()
 	targetInfo.color_target_descriptions = colorTargetDescriptions.data();
 
 
+	std::vector<SDL_GPUVertexAttribute> vertexAttributes
+	{
+		{0u,0u,SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,0u}, // Position attribute
+		{1u,0u,SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,sizeof(float) * 3}
+	};
+
+	std::vector<SDL_GPUVertexBufferDescription> vertexBufferDescriptions
+	{
+		{0u,sizeof(glm::vec3), SDL_GPU_VERTEXINPUTRATE_VERTEX,0u}
+	};
+
+	SDL_GPUVertexInputState vertexInputState{};
+	vertexInputState.vertex_attributes = vertexAttributes.data();
+	vertexInputState.vertex_buffer_descriptions = vertexBufferDescriptions.data();
+	vertexInputState.num_vertex_attributes = (Uint32)vertexAttributes.size();
+	vertexInputState.num_vertex_buffers = (Uint32)vertexBufferDescriptions.size();
+
+
 	SDL_GPUGraphicsPipelineCreateInfo pipelineCreateInfo{};
 	pipelineCreateInfo.fragment_shader = m_FragmentShader;
 	pipelineCreateInfo.vertex_shader = m_VertexShader;
 	pipelineCreateInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 	pipelineCreateInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
 	pipelineCreateInfo.target_info = targetInfo;
+	pipelineCreateInfo.vertex_input_state = vertexInputState;
 
 	m_Pipeline  = SDL_CreateGPUGraphicsPipeline(m_Device,&pipelineCreateInfo);
 	if (!m_Pipeline) {
@@ -247,10 +266,12 @@ void App::AllocateBuffers()
 	{
 		std::array<SDL_GPUColorTargetInfo, 1> colorTargetInfos{};
 		colorTargetInfos[0].texture = swapchain;
+		// BG color
 		colorTargetInfos[0].clear_color.r = 0.3f;
 		colorTargetInfos[0].clear_color.g = 0.4f;
 		colorTargetInfos[0].clear_color.b = 0.5f;
 		colorTargetInfos[0].clear_color.a = 1.0f;
+
 		colorTargetInfos[0].load_op = SDL_GPU_LOADOP_CLEAR;
 		colorTargetInfos[0].store_op = SDL_GPU_STOREOP_STORE;
 
