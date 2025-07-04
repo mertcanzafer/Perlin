@@ -1,5 +1,9 @@
 #include "App.h"
 
+// global variables
+// !Not a very good design choice, but I'll arrange this later
+static SDL_GPUBuffer* g_VertexBuffer = nullptr;
+
 App::App()
 	:m_Width{800u},m_Height{600u},m_BasePath{SDL_GetBasePath()},m_WindowSize{1u},
 	m_Windows(m_WindowSize,nullptr),m_Device{nullptr},m_VertexShader{nullptr},m_FragmentShader{nullptr},m_Pipeline{nullptr}
@@ -43,14 +47,17 @@ void App::InitSDL()
 		throw dbg::SDL_Exception("Failed to claim window for GPU device");
 	}
 
+	std::string fShaderName = "PositionColor.vert";
+	std::string vShaderName = "SolidColor.frag";
+
 	// Set the shaders
-	m_VertexShader = LoadShader(m_Device, std::string("PositionColor.vert"), 0, 0, 0, 0);
+	m_VertexShader = LoadShader(m_Device, fShaderName, 0, 0, 0, 0);
 
 	if (!m_VertexShader) {
 		throw dbg::SDL_Exception("Failed to load shader");
 	}
 
-	m_FragmentShader = LoadShader(m_Device, std::string("SolidColor.frag"), 0, 0, 0, 0);
+	m_FragmentShader = LoadShader(m_Device, vShaderName, 0, 0, 0, 0);
 
 	if (!m_FragmentShader) {
 		throw dbg::SDL_Exception("Failed to load fragment shader");
@@ -124,18 +131,110 @@ void App::OnCreate()
 	if (!m_Pipeline) {
 		throw dbg::SDL_Exception("Failed to create graphics pipeline");
 	}
+
+	// Create vertex buffer data
+	// !Winding order is counter-clockwise
+
+	struct VertexData
+	{
+		glm::vec3 position;
+		struct Color {
+			Uint8 r, g, b, a;
+		}color;
+	};
+
+	std::array<VertexData, 3> vertices
+	{
+		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f), VertexData::Color{ 255, 0, 0, 255}},  
+		VertexData{ glm::vec3(0.5f, -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255} }, 
+		VertexData{ glm::vec3(0.0f,  0.5f, 0.0f),  VertexData::Color{ 0, 0, 255, 255} } 
+	};
+
+	SDL_GPUBufferCreateInfo bufferCreateInfo{};
+	bufferCreateInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+	bufferCreateInfo.size = sizeof(vertices); // ?
+
+	SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(m_Device, &bufferCreateInfo);
+	if (!vertexBuffer)
+		throw dbg::SDL_Exception("Couldn't create GPU buffer.");
+	g_VertexBuffer = vertexBuffer;
+
+	// To get data into the vertex buffer, we have to use a transfer buffer
+	SDL_GPUTransferBufferCreateInfo transferBuffCreateInfo{};
+	transferBuffCreateInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+	transferBuffCreateInfo.size = sizeof(vertices); // ?
+
+	// Create the transfer buffer
+	SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &transferBuffCreateInfo);
+	void* transferData = SDL_MapGPUTransferBuffer(m_Device, transferBuffer, false); 
+
+	if (!transferData)
+		throw dbg::SDL_Exception("Transfering data went wrong!");
+	
+	// Copy the buffer
+	SDL_memcpy(transferData, vertices.data(), sizeof(vertices));
+
+	SDL_UnmapGPUTransferBuffer(m_Device, transferBuffer);
+
+	// Upload the transfer data to the vertex buffer
+	SDL_GPUCommandBuffer* uploadCmdBuf = SDL_AcquireGPUCommandBuffer(m_Device);
+	if(!uploadCmdBuf)
+		throw dbg::SDL_Exception("Failed to acquire GPU command buffer for upload");
+	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmdBuf);
+	if(!copyPass)
+		throw dbg::SDL_Exception("Failed to begin GPU copy pass");
+
+	SDL_GPUTransferBufferLocation transferLocation{};
+	transferLocation.transfer_buffer = transferBuffer,
+	transferLocation.offset = 0u;
+
+	SDL_GPUBufferRegion bufferRegion{};
+	bufferRegion.buffer = vertexBuffer;
+	bufferRegion.offset = 0u;
+	bufferRegion.size = sizeof(vertices);
+
+	SDL_UploadToGPUBuffer(copyPass, &transferLocation, &bufferRegion, false);
+	SDL_EndGPUCopyPass(copyPass);
+
+	if(!SDL_SubmitGPUCommandBuffer(uploadCmdBuf))
+		throw dbg::SDL_Exception("Failed to submit GPU command buffer for upload");
+	
+	SDL_ReleaseGPUTransferBuffer(m_Device, transferBuffer);
 }
 
 void App::Clean()
 {
-	SDL_ReleaseWindowFromGPUDevice(m_Device, m_Windows[0]);
-	SDL_DestroyWindow(m_Windows[0]);
+	if (m_VertexShader) {
+		SDL_ReleaseGPUShader(m_Device, m_VertexShader);
+		m_VertexShader = nullptr;
+	}
 
-	SDL_ReleaseGPUShader(m_Device, m_VertexShader);
-	SDL_ReleaseGPUShader(m_Device, m_FragmentShader);
-	SDL_ReleaseGPUGraphicsPipeline(m_Device, m_Pipeline);
-	SDL_DestroyGPUDevice(m_Device);
-	SDL_Quit();
+	if (m_FragmentShader) {
+		SDL_ReleaseGPUShader(m_Device, m_FragmentShader);
+		m_FragmentShader = nullptr;
+	}
+
+	if (m_Pipeline) {
+		SDL_ReleaseGPUGraphicsPipeline(m_Device, m_Pipeline);
+		m_Pipeline = nullptr;
+	}
+
+	if (g_VertexBuffer) {
+		SDL_ReleaseGPUBuffer(m_Device, g_VertexBuffer);
+		g_VertexBuffer = nullptr;
+	}
+
+	if (m_Windows[0]) {
+		SDL_ReleaseWindowFromGPUDevice(m_Device, m_Windows[0]);
+		SDL_DestroyWindow(m_Windows[0]);
+		m_Windows[0] = nullptr;
+	}
+
+	if (m_Device) {
+		SDL_DestroyGPUDevice(m_Device);
+		m_Device = nullptr;
+	}
+    SDL_Quit();
 }
 
 SDL_GPUShader* App::LoadShader
@@ -279,6 +378,14 @@ void App::AllocateBuffers()
 			(Uint32)colorTargetInfos.size(), nullptr);
 
 		SDL_BindGPUGraphicsPipeline(renderPass, m_Pipeline);
+		
+		std::vector<SDL_GPUBufferBinding> bufferBindins
+		{
+			{g_VertexBuffer,0u}
+		};
+
+		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(),(Uint32) bufferBindins.size());
+
 		SDL_DrawGPUPrimitives(renderPass, 3u, 1u, 0u, 0u);
 
 		SDL_EndGPURenderPass(renderPass);
