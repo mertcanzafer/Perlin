@@ -3,6 +3,7 @@
 // global variables
 // !Not a very good design choice, but I'll arrange this later
 static SDL_GPUBuffer* g_VertexBuffer = nullptr;
+static SDL_GPUBuffer* g_IndexBuffer = nullptr;
 
 struct VertexData
 {
@@ -56,17 +57,17 @@ void App::InitSDL()
 		throw dbg::SDL_Exception("Failed to claim window for GPU device");
 	}
 
-	std::string fShaderName = "PositionColor.vert";
-	std::string vShaderName = "SolidColor.frag";
+	std::string vShaderName = "PositionColor.vert";
+	std::string fShaderName = "SolidColor.frag";
 
 	// Set the shaders
-	m_VertexShader = LoadShader(m_Device, fShaderName, 0, 0, 0, 0);
+	m_VertexShader = LoadShader(m_Device, vShaderName, 0, 0, 0, 0);
 
 	if (!m_VertexShader) {
-		throw dbg::SDL_Exception("Failed to load shader");
+		throw dbg::SDL_Exception("Failed to vertex load shader");
 	}
 
-	m_FragmentShader = LoadShader(m_Device, vShaderName, 0, 0, 0, 0);
+	m_FragmentShader = LoadShader(m_Device, fShaderName, 0, 0, 0, 0);
 
 	if (!m_FragmentShader) {
 		throw dbg::SDL_Exception("Failed to load fragment shader");
@@ -143,33 +144,45 @@ void App::OnCreate()
 
 	// Create vertex buffer data
 	// !Winding order is counter-clockwise
-	std::array<VertexData, 6> vertices
+	std::array<VertexData, 4> vertices
 	{
-		// First triangle
+		// Define the vertices of a square
 		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f), VertexData::Color{ 0, 0, 255, 255}},  
 		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255} }, 
 		VertexData{ glm::vec3(0.5f,  -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255} },
-		
-		// First triangle
-		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f), VertexData::Color{ 0, 0, 255, 255}},
-		VertexData{ glm::vec3(0.5f, -0.5f, 0.0f),  VertexData::Color{ 0 ,255, 0, 255} },
-		VertexData{ glm::vec3(0.5f,  0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255} },
-
+		VertexData{ glm::vec3(0.5f,  0.5f, 0.0f),  VertexData::Color{ 255,  0,0,255}}
 	};
 
+	std::array<Uint16, 6> indices
+	{
+		0u, 1u, 2u, // First triangle
+		0u, 2u, 3u  // Second triangle
+	};
+
+	// Create the vertex buffer
 	SDL_GPUBufferCreateInfo bufferCreateInfo{};
 	bufferCreateInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-	bufferCreateInfo.size = sizeof(vertices); // ?
+	bufferCreateInfo.size = sizeof(vertices);
 
 	SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(m_Device, &bufferCreateInfo);
 	if (!vertexBuffer)
-		throw dbg::SDL_Exception("Couldn't create GPU buffer.");
+		throw dbg::SDL_Exception("Couldn't create GPU vertex buffer.");
 	g_VertexBuffer = vertexBuffer;
 
-	// To get data into the vertex buffer, we have to use a transfer buffer
+	// Create the index buffer
+	SDL_GPUBufferCreateInfo indexBufferCreateInfo{};
+	indexBufferCreateInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+	indexBufferCreateInfo.size = sizeof(indices);
+
+	SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(m_Device, &indexBufferCreateInfo);
+	if(!indexBuffer)
+		throw dbg::SDL_Exception("Couldn't create GPU index buffer.");
+	g_IndexBuffer = indexBuffer;
+
+	// To get data into the vertex and index buffer, we have to use a transfer buffer
 	SDL_GPUTransferBufferCreateInfo transferBuffCreateInfo{};
 	transferBuffCreateInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-	transferBuffCreateInfo.size = sizeof(vertices); // ?
+	transferBuffCreateInfo.size = sizeof(vertices) + sizeof(indices);
 
 	// Create the transfer buffer
 	SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &transferBuffCreateInfo);
@@ -178,8 +191,12 @@ void App::OnCreate()
 	if (!transferData)
 		throw dbg::SDL_Exception("Transfering data went wrong!");
 	
-	// Copy the buffer
+	// Copy the vertex and index buffer
 	SDL_memcpy(transferData, vertices.data(), sizeof(vertices));
+
+	void* IndicesOffset = static_cast<void*>(static_cast<std::byte*>(transferData) + sizeof(vertices));
+	
+	SDL_memcpy(IndicesOffset, indices.data(), sizeof(indices));
 
 	SDL_UnmapGPUTransferBuffer(m_Device, transferBuffer);
 
@@ -191,16 +208,28 @@ void App::OnCreate()
 	if(!copyPass)
 		throw dbg::SDL_Exception("Failed to begin GPU copy pass");
 
-	SDL_GPUTransferBufferLocation transferLocation{};
-	transferLocation.transfer_buffer = transferBuffer,
-	transferLocation.offset = 0u;
+	SDL_GPUTransferBufferLocation vTransferLocation{};
+	vTransferLocation.transfer_buffer = transferBuffer,
+	vTransferLocation.offset = 0u;
 
+	SDL_GPUTransferBufferLocation iTransferLocation{};
+	iTransferLocation.transfer_buffer = transferBuffer,
+	iTransferLocation.offset = sizeof(vertices);
+
+	// Buffer region for vertex buffer
 	SDL_GPUBufferRegion bufferRegion{};
 	bufferRegion.buffer = vertexBuffer;
 	bufferRegion.offset = 0u;
 	bufferRegion.size = sizeof(vertices);
 
-	SDL_UploadToGPUBuffer(copyPass, &transferLocation, &bufferRegion, false);
+	SDL_GPUBufferRegion indexBufferRegion{};
+	indexBufferRegion.buffer = indexBuffer;
+	indexBufferRegion.offset = 0u;
+	indexBufferRegion.size = sizeof(indices);
+
+	SDL_UploadToGPUBuffer(copyPass, &vTransferLocation, &bufferRegion, false);
+	SDL_UploadToGPUBuffer(copyPass, &iTransferLocation, &indexBufferRegion, false);
+
 	SDL_EndGPUCopyPass(copyPass);
 
 	if(!SDL_SubmitGPUCommandBuffer(uploadCmdBuf))
@@ -229,6 +258,11 @@ void App::Clean()
 	if (g_VertexBuffer) {
 		SDL_ReleaseGPUBuffer(m_Device, g_VertexBuffer);
 		g_VertexBuffer = nullptr;
+	}
+
+	if(g_IndexBuffer) {
+		SDL_ReleaseGPUBuffer(m_Device, g_IndexBuffer);
+		g_IndexBuffer = nullptr;
 	}
 
 	if (m_Windows[0]) {
@@ -388,12 +422,15 @@ void App::AllocateBuffers()
 		
 		std::vector<SDL_GPUBufferBinding> bufferBindins
 		{
-			{g_VertexBuffer,0u}
+			{g_VertexBuffer,0u},
 		};
 
-		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(),(Uint32) bufferBindins.size());
+		SDL_GPUBufferBinding indexBufferBinding{ g_IndexBuffer, 0u };
 
-		SDL_DrawGPUPrimitives(renderPass, 6u, 1u, 0u, 0u);
+		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(),(Uint32) bufferBindins.size());
+		SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+
+		SDL_DrawGPUIndexedPrimitives(renderPass,6u,1u,0u,0u,0u);
 
 		SDL_EndGPURenderPass(renderPass);
 	}
