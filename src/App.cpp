@@ -4,6 +4,15 @@
 // !Not a very good design choice, but I'll arrange this later
 static SDL_GPUBuffer* g_VertexBuffer = nullptr;
 
+struct VertexData
+{
+	glm::vec3 position;
+	struct Color {
+		Uint8 r, g, b, a;
+	}color;
+};
+
+
 App::App()
 	:m_Width{800u},m_Height{600u},m_BasePath{SDL_GetBasePath()},m_WindowSize{1u},
 	m_Windows(m_WindowSize,nullptr),m_Device{nullptr},m_VertexShader{nullptr},m_FragmentShader{nullptr},m_Pipeline{nullptr}
@@ -109,7 +118,7 @@ void App::OnCreate()
 
 	std::vector<SDL_GPUVertexBufferDescription> vertexBufferDescriptions
 	{
-		{0u,sizeof(glm::vec3), SDL_GPU_VERTEXINPUTRATE_VERTEX,0u}
+		{0u,sizeof(VertexData), SDL_GPU_VERTEXINPUTRATE_VERTEX,0u}
 	};
 
 	SDL_GPUVertexInputState vertexInputState{};
@@ -134,20 +143,18 @@ void App::OnCreate()
 
 	// Create vertex buffer data
 	// !Winding order is counter-clockwise
-
-	struct VertexData
+	std::array<VertexData, 6> vertices
 	{
-		glm::vec3 position;
-		struct Color {
-			Uint8 r, g, b, a;
-		}color;
-	};
+		// First triangle
+		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f), VertexData::Color{ 0, 0, 255, 255}},  
+		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255} }, 
+		VertexData{ glm::vec3(0.5f,  -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255} },
+		
+		// First triangle
+		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f), VertexData::Color{ 0, 0, 255, 255}},
+		VertexData{ glm::vec3(0.5f, -0.5f, 0.0f),  VertexData::Color{ 0 ,255, 0, 255} },
+		VertexData{ glm::vec3(0.5f,  0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255} },
 
-	std::array<VertexData, 3> vertices
-	{
-		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f), VertexData::Color{ 255, 0, 0, 255}},  
-		VertexData{ glm::vec3(0.5f, -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255} }, 
-		VertexData{ glm::vec3(0.0f,  0.5f, 0.0f),  VertexData::Color{ 0, 0, 255, 255} } 
 	};
 
 	SDL_GPUBufferCreateInfo bufferCreateInfo{};
@@ -386,7 +393,7 @@ void App::AllocateBuffers()
 
 		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(),(Uint32) bufferBindins.size());
 
-		SDL_DrawGPUPrimitives(renderPass, 3u, 1u, 0u, 0u);
+		SDL_DrawGPUPrimitives(renderPass, 6u, 1u, 0u, 0u);
 
 		SDL_EndGPURenderPass(renderPass);
 	}
