@@ -18,7 +18,8 @@ public:
     App(
         const Uint32 width, const Uint32 height, const Uint32 windowSize,
         std::string& path, std::vector<SDL_Window*>& windows,
-        SDL_GPUDevice* device, SDL_GPUShader* vShader, SDL_GPUShader* fShader, SDL_GPUGraphicsPipeline* pipeline
+        SDL_GPUDevice* device, SDL_GPUShader* vShader, SDL_GPUShader* fShader, SDL_GPUGraphicsPipeline* pipeline,
+		SDL_Surface* surface
     );
 
     App(const App &) = delete;
@@ -42,6 +43,8 @@ private:
     SDL_GPUShader* m_FragmentShader;
     SDL_GPUGraphicsPipeline* m_Pipeline;
 
+    SDL_Surface* m_Surface;
+
     // Private Attributes
     void Clean();
     SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
@@ -53,4 +56,7 @@ private:
     
     void InitializeAssetLoader();
     void AllocateBuffers();
+
+    SDL_Surface* LoadImage(const std::string& fileName, int desirecChannels);
+
 };
