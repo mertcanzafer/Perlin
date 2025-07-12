@@ -98,7 +98,7 @@ void App::Render()
 			default: break;
 			}
 		}
-		AllocateBuffers();
+		SubmitRenderCommands();
 	}
 }
 
@@ -160,15 +160,20 @@ void App::OnCreate()
 		0u, 1u, 2u, // First triangle
 		0u, 2u, 3u  // Second triangle
 	};
+	
+	InitializeGPUResources(vertices, indices);
+}
 
+void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertices,const std::array<Uint16, 6>& indices)
+{
 	/*
 	* - We may replace bufferCreateInfos with SDL3 Properties when creating buffers.
 	* - The application currently uses a single thread for rendering
 	* - In the future, We may use multiple threads for different tasks like rendering, physics, etc.
-	* - Therefore, we need to be careful about thread safe functions. 
+	* - Therefore, we need to be careful about thread safe functions.
 	* - SDL properties are reccommended for thread safety.
 	*/
-
+	
 	// Create the vertex buffer
 	SDL_GPUBufferCreateInfo bufferCreateInfo{};
 	bufferCreateInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
@@ -188,7 +193,7 @@ void App::OnCreate()
 	indexBufferCreateInfo.size = sizeof(indices);
 
 	SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(m_Device, &indexBufferCreateInfo);
-	if(!indexBuffer)
+	if (!indexBuffer)
 		throw dbg::SDL_Exception("Couldn't create GPU index buffer.");
 	g_IndexBuffer = indexBuffer;
 
@@ -201,12 +206,12 @@ void App::OnCreate()
 	textureCreateInfo.layer_count_or_depth = 1u;
 	textureCreateInfo.num_levels = 1u;
 	textureCreateInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-	
+
 	SDL_GPUTexture* texture = SDL_CreateGPUTexture(m_Device, &textureCreateInfo);
-	if(!texture)
+	if (!texture)
 		throw dbg::SDL_Exception("Failed to create GPU texture");
 	g_Texture = texture;
-	
+
 	// Set the texture name
 	SDL_SetGPUTextureName(m_Device, texture, "Ravioli texture");
 
@@ -217,16 +222,16 @@ void App::OnCreate()
 
 	// Create the transfer buffer
 	SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &transferBuffCreateInfo);
-	void* transferData = SDL_MapGPUTransferBuffer(m_Device, transferBuffer, false); 
+	void* transferData = SDL_MapGPUTransferBuffer(m_Device, transferBuffer, false);
 
 	if (!transferData)
 		throw dbg::SDL_Exception("Transfering data went wrong!");
-	
+
 	// Copy the vertex and index buffer
 	SDL_memcpy(transferData, vertices.data(), sizeof(vertices));
 
 	void* IndicesOffset = static_cast<void*>(static_cast<std::byte*>(transferData) + sizeof(vertices));
-	
+
 	SDL_memcpy(IndicesOffset, indices.data(), sizeof(indices));
 
 	SDL_UnmapGPUTransferBuffer(m_Device, transferBuffer);
@@ -237,11 +242,11 @@ void App::OnCreate()
 	textureTransferBuffCreateInfo.size = (m_Surface->w * m_Surface->h) * 4; // Assuming 4 channels (RGBA)
 
 	SDL_GPUTransferBuffer* textureTransferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &textureTransferBuffCreateInfo);
-	if(!textureTransferBuffer)
+	if (!textureTransferBuffer)
 		throw dbg::SDL_Exception("Failed to create GPU transfer buffer for texture");
 
 	void* textureTransferData = SDL_MapGPUTransferBuffer(m_Device, textureTransferBuffer, false);
-	if(!textureTransferData)
+	if (!textureTransferData)
 		throw dbg::SDL_Exception("Failed to map GPU transfer buffer for texture");
 	// Copy the texture data into the transfer buffer
 	SDL_memcpy(textureTransferData, m_Surface->pixels, (static_cast<size_t>(m_Surface->w) * m_Surface->h) * 4);
@@ -249,19 +254,19 @@ void App::OnCreate()
 
 	// Upload the transfer data to the vertex buffer
 	SDL_GPUCommandBuffer* uploadCmdBuf = SDL_AcquireGPUCommandBuffer(m_Device);
-	if(!uploadCmdBuf)
+	if (!uploadCmdBuf)
 		throw dbg::SDL_Exception("Failed to acquire GPU command buffer for upload");
 	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmdBuf);
-	if(!copyPass)
+	if (!copyPass)
 		throw dbg::SDL_Exception("Failed to begin GPU copy pass");
 
 	SDL_GPUTransferBufferLocation vTransferLocation{};
 	vTransferLocation.transfer_buffer = transferBuffer,
-	vTransferLocation.offset = 0u;
+		vTransferLocation.offset = 0u;
 
 	SDL_GPUTransferBufferLocation iTransferLocation{};
 	iTransferLocation.transfer_buffer = transferBuffer,
-	iTransferLocation.offset = sizeof(vertices);
+		iTransferLocation.offset = sizeof(vertices);
 
 	// Buffer region for vertex buffer
 	SDL_GPUBufferRegion bufferRegion{};
@@ -276,7 +281,7 @@ void App::OnCreate()
 
 	SDL_UploadToGPUBuffer(copyPass, &vTransferLocation, &bufferRegion, false);
 	SDL_UploadToGPUBuffer(copyPass, &iTransferLocation, &indexBufferRegion, false);
-	
+
 	// Now upload the texture data
 	SDL_GPUTextureTransferInfo textureTransferInfo{};
 	textureTransferInfo.offset = 0; /* Zeros out the rest */
@@ -287,14 +292,14 @@ void App::OnCreate()
 	textureRegion.w = m_Surface->w;
 	textureRegion.h = m_Surface->h;
 	textureRegion.d = 1u; // 2D texture, depth is 1
-	
+
 	SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
 
 	SDL_EndGPUCopyPass(copyPass);
 
-	if(!SDL_SubmitGPUCommandBuffer(uploadCmdBuf))
+	if (!SDL_SubmitGPUCommandBuffer(uploadCmdBuf))
 		throw dbg::SDL_Exception("Failed to submit GPU command buffer for upload");
-	
+
 	SDL_DestroySurface(m_Surface);
 	SDL_ReleaseGPUTransferBuffer(m_Device, transferBuffer);
 	SDL_ReleaseGPUTransferBuffer(m_Device, textureTransferBuffer);
@@ -453,7 +458,7 @@ void App::InitializeAssetLoader()
 	m_BasePath = SDL_GetBasePath();
 }
 
-void App::AllocateBuffers()
+void App::SubmitRenderCommands()
 {
 	// Set command buffer for GPU device
 	SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(m_Device);
@@ -506,6 +511,7 @@ void App::AllocateBuffers()
 		throw dbg::SDL_Exception("Failed to submit GPU command buffer");
 	}
 }
+
 
 SDL_Surface* App::LoadImage(const std::string& fileName, int desirecChannels)
 {

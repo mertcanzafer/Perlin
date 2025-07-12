@@ -55,7 +55,8 @@ private:
         Uint32 storageTextureCount);
     
     void InitializeAssetLoader();
-    void AllocateBuffers();
+    void SubmitRenderCommands();
+    void InitializeGPUResources(const std::array<struct VertexData,4>& vertices, const std::array<Uint16, 6>& indices);
 
     SDL_Surface* LoadImage(const std::string& fileName, int desirecChannels);
 
