@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include <glm\vec3.hpp>
+#include <glm\vec2.hpp>
 
 class App
 {
@@ -26,7 +27,7 @@ public:
     App &operator=(const App &) = delete;
 
     void InitSDL();
-    void OnCreate(); // Will Create the pipline
+    void OnCreate();
     void Render();
 
     ~App();
@@ -45,7 +46,7 @@ private:
 
     SDL_Surface* m_Surface;
 
-    // Private Attributes
+    // Private Methods
     void Clean();
     SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
         std::string& shaderFileName,
@@ -59,5 +60,4 @@ private:
     void InitializeGPUResources(const std::array<struct VertexData,4>& vertices, const std::array<Uint16, 6>& indices);
 
     SDL_Surface* LoadImage(const std::string& fileName, int desirecChannels);
-
 };

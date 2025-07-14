@@ -5,6 +5,7 @@
 static SDL_GPUBuffer* g_VertexBuffer = nullptr;
 static SDL_GPUBuffer* g_IndexBuffer = nullptr;
 static SDL_GPUTexture* g_Texture = nullptr;
+static SDL_GPUSampler* g_Sampler = nullptr;
 
 struct VertexData
 {
@@ -12,8 +13,13 @@ struct VertexData
 	struct Color {
 		Uint8 r, g, b, a;
 	}color;
-};
+	glm::vec2 uv; // texture coordinates, if needed
 
+	explicit VertexData(glm::vec3 pos, Color color, glm::vec2 uvCoords)
+		: position(pos), color(color), uv(uvCoords) {
+	}
+	VertexData() = default;
+};
 
 App::App()
 	:m_Width{800u},m_Height{600u},m_BasePath{SDL_GetBasePath()},m_WindowSize{1u},
@@ -54,8 +60,8 @@ void App::InitSDL()
 		throw dbg::SDL_Exception("Failed to claim window for GPU device");
 	}
 
-	std::string vShaderName = "PositionColor.vert";
-	std::string fShaderName = "SolidColor.frag";
+	std::string vShaderName = "TexturedQuad.vert";
+	std::string fShaderName = "TexturedQuad.frag";
 
 	// Set the shaders
 	m_VertexShader = LoadShader(m_Device, vShaderName, 0, 0, 0, 0);
@@ -64,14 +70,14 @@ void App::InitSDL()
 		throw dbg::SDL_Exception("Failed to vertex load shader");
 	}
 
-	m_FragmentShader = LoadShader(m_Device, fShaderName, 0, 0, 0, 0);
+	m_FragmentShader = LoadShader(m_Device, fShaderName, 1, 0, 0, 0);
 
 	if (!m_FragmentShader) {
 		throw dbg::SDL_Exception("Failed to load fragment shader");
 	}
 
 	// Load texture data
-	m_Surface = LoadImage("ravioli.bmp", 4);
+	m_Surface = LoadImage("ravioli_inverted.bmp", 4);
 	if(!m_Surface) {
 		throw dbg::SDL_Exception("Failed to load image");
 	}
@@ -115,8 +121,9 @@ void App::OnCreate()
 
 	std::vector<SDL_GPUVertexAttribute> vertexAttributes
 	{
-		{0u,0u,SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,0u}, // Position attribute
-		{1u,0u,SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,sizeof(float) * 3}
+		{0u,0u,SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,static_cast<Uint32>(offsetof(VertexData, position))}, // Position attribute
+		{1u,0u,SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM,static_cast<Uint32>(offsetof(VertexData, color))}, // color attribute
+		{2u,0u,SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,static_cast<Uint32>(offsetof(VertexData, uv))} // UV attribute, if needed
 	};
 
 	std::vector<SDL_GPUVertexBufferDescription> vertexBufferDescriptions
@@ -149,10 +156,10 @@ void App::OnCreate()
 	std::array<VertexData, 4> vertices
 	{
 		// Define the vertices of a square
-		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f), VertexData::Color{ 0, 0, 255, 255}},  
-		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255} }, 
-		VertexData{ glm::vec3(0.5f,  -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255} },
-		VertexData{ glm::vec3(0.5f,  0.5f, 0.0f),  VertexData::Color{ 255,  0,0,255}}
+		VertexData{ glm::vec3(-0.5f, 0.5f, 0.0f),	VertexData::Color{ 0, 0, 255, 255},		glm::vec2(0,1)},
+		VertexData{ glm::vec3(-0.5f, -0.5f, 0.0f),  VertexData::Color{ 255, 0, 0, 255},		glm::vec2(0,0)},
+		VertexData{ glm::vec3(0.5f,  -0.5f, 0.0f),  VertexData::Color{ 0, 255, 0, 255},		glm::vec2(1,0)},
+		VertexData{ glm::vec3(0.5f,  0.5f, 0.0f),	VertexData::Color{ 255,  255,255,255},  glm::vec2(1,1)}
 	};
 
 	std::array<Uint16, 6> indices
@@ -162,6 +169,23 @@ void App::OnCreate()
 	};
 	
 	InitializeGPUResources(vertices, indices);
+
+	// Create gpu sampler
+	// Linear Clamping sampler
+	SDL_GPUSamplerCreateInfo samplerCreateInfo{};
+	samplerCreateInfo.min_filter = SDL_GPU_FILTER_LINEAR;
+	samplerCreateInfo.mag_filter = SDL_GPU_FILTER_LINEAR;
+	samplerCreateInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+	samplerCreateInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+	SDL_GPUSampler* sampler = SDL_CreateGPUSampler(m_Device, &samplerCreateInfo);
+	if(!sampler)
+	{
+		throw dbg::SDL_Exception("Failed to create GPU sampler");
+	}
+	g_Sampler = sampler;
 }
 
 void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertices,const std::array<Uint16, 6>& indices)
@@ -184,7 +208,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 		throw dbg::SDL_Exception("Couldn't create GPU vertex buffer.");
 	g_VertexBuffer = vertexBuffer;
 
-	// Set the gpu buffer name
+	// Set the vertex buffer name
 	SDL_SetGPUBufferName(m_Device, vertexBuffer, "Perlin vertex buffer.");
 
 	// Create the index buffer
@@ -196,6 +220,9 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 	if (!indexBuffer)
 		throw dbg::SDL_Exception("Couldn't create GPU index buffer.");
 	g_IndexBuffer = indexBuffer;
+
+	// Set the Index buffer name
+	SDL_SetGPUBufferName(m_Device, indexBuffer, "Perlin index buffer.");
 
 	// Create a texture object
 	SDL_GPUTextureCreateInfo textureCreateInfo{};
@@ -305,6 +332,66 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 	SDL_ReleaseGPUTransferBuffer(m_Device, textureTransferBuffer);
 }
 
+void App::SubmitRenderCommands()
+{
+	// Set command buffer for GPU device
+	SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(m_Device);
+	if (!commandBuffer) {
+		throw dbg::SDL_Exception("Failed to acquire GPU command buffer");
+	}
+
+	// Create a swapchain of textures
+	SDL_GPUTexture* swapchain;
+	if (!SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, m_Windows[0], &swapchain, nullptr, nullptr))
+	{
+		throw dbg::SDL_Exception("Failed to acquire swapchain texture");
+	}
+
+	if (swapchain != nullptr)
+	{
+		std::array<SDL_GPUColorTargetInfo, 1> colorTargetInfos{};
+		colorTargetInfos[0].texture = swapchain;
+		// BG color
+		colorTargetInfos[0].clear_color.r = 0.3f;
+		colorTargetInfos[0].clear_color.g = 0.4f;
+		colorTargetInfos[0].clear_color.b = 0.5f;
+		colorTargetInfos[0].clear_color.a = 1.0f;
+
+		colorTargetInfos[0].load_op = SDL_GPU_LOADOP_CLEAR;
+		colorTargetInfos[0].store_op = SDL_GPU_STOREOP_STORE;
+
+		SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, colorTargetInfos.data(),
+			(Uint32)colorTargetInfos.size(), nullptr);
+
+		SDL_BindGPUGraphicsPipeline(renderPass, m_Pipeline);
+
+		std::vector<SDL_GPUBufferBinding> bufferBindins
+		{
+			{g_VertexBuffer,0u},
+		};
+
+		SDL_GPUTextureSamplerBinding textureSamplerBinding
+		{
+			g_Texture,g_Sampler
+		};
+
+		SDL_GPUBufferBinding indexBufferBinding{ g_IndexBuffer, 0u };
+
+		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(), (Uint32)bufferBindins.size());
+		SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+
+		SDL_BindGPUFragmentSamplers(renderPass, 0u, &textureSamplerBinding, 1u);
+		SDL_DrawGPUIndexedPrimitives(renderPass, 6u, 1u, 0u, 0u, 0u);
+
+		SDL_EndGPURenderPass(renderPass);
+	}
+
+	if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
+	{
+		throw dbg::SDL_Exception("Failed to submit GPU command buffer");
+	}
+}
+
 void App::Clean()
 {
 	if (m_VertexShader) {
@@ -334,6 +421,11 @@ void App::Clean()
 	if (g_Texture) {
 		SDL_ReleaseGPUTexture(m_Device, g_Texture);
 		g_Texture = nullptr;
+	}
+
+	if(g_Sampler) {
+		SDL_ReleaseGPUSampler(m_Device, g_Sampler);
+		g_Sampler = nullptr;
 	}
 
 	if (m_Windows[0]) {
@@ -458,60 +550,6 @@ void App::InitializeAssetLoader()
 	m_BasePath = SDL_GetBasePath();
 }
 
-void App::SubmitRenderCommands()
-{
-	// Set command buffer for GPU device
-	SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(m_Device);
-	if (!commandBuffer) {
-		throw dbg::SDL_Exception("Failed to acquire GPU command buffer");
-	}
-
-	// Create a swapchain of textures
-	SDL_GPUTexture* swapchain;
-	if (!SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, m_Windows[0], &swapchain, nullptr, nullptr))
-	{
-		throw dbg::SDL_Exception("Failed to acquire swapchain texture");
-	}
-
-	if (swapchain != nullptr)
-	{
-		std::array<SDL_GPUColorTargetInfo, 1> colorTargetInfos{};
-		colorTargetInfos[0].texture = swapchain;
-		// BG color
-		colorTargetInfos[0].clear_color.r = 0.3f;
-		colorTargetInfos[0].clear_color.g = 0.4f;
-		colorTargetInfos[0].clear_color.b = 0.5f;
-		colorTargetInfos[0].clear_color.a = 1.0f;
-
-		colorTargetInfos[0].load_op = SDL_GPU_LOADOP_CLEAR;
-		colorTargetInfos[0].store_op = SDL_GPU_STOREOP_STORE;
-
-		SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, colorTargetInfos.data(),
-			(Uint32)colorTargetInfos.size(), nullptr);
-
-		SDL_BindGPUGraphicsPipeline(renderPass, m_Pipeline);
-		
-		std::vector<SDL_GPUBufferBinding> bufferBindins
-		{
-			{g_VertexBuffer,0u},
-		};
-
-		SDL_GPUBufferBinding indexBufferBinding{ g_IndexBuffer, 0u };
-
-		SDL_BindGPUVertexBuffers(renderPass, 0u, bufferBindins.data(),(Uint32) bufferBindins.size());
-		SDL_BindGPUIndexBuffer(renderPass, &indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-
-		SDL_DrawGPUIndexedPrimitives(renderPass,6u,1u,0u,0u,0u);
-
-		SDL_EndGPURenderPass(renderPass);
-	}
-
-	if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
-	{
-		throw dbg::SDL_Exception("Failed to submit GPU command buffer");
-	}
-}
-
 
 SDL_Surface* App::LoadImage(const std::string& fileName, int desirecChannels)
 {
@@ -520,7 +558,24 @@ SDL_Surface* App::LoadImage(const std::string& fileName, int desirecChannels)
 	SDL_Surface* result{ nullptr };
 	SDL_PixelFormat pixelFormat{};
 
-	result = SDL_LoadBMP(fullPath.c_str());
+	std::string fileFormat = fullPath.substr(fullPath.find_last_of('.') + 1);
+	std::clog << "Image format: " << fileFormat << std::endl;
+
+	if(fileFormat == "bmp")
+		result = SDL_LoadBMP(fullPath.c_str());
+	/*else if(fileFormat == "png")
+		result = SDL_LoadPNG(fullPath.c_str());
+	else if(fileFormat == "jpg" || fileFormat == "jpeg")
+		result = SDL_LoadJPG(fullPath.c_str());
+	else if(fileFormat == "tga")
+		result = SDL_LoadTGA(fullPath.c_str());
+	else if(fileFormat == "webp")
+		result = SDL_LoadWEBP(fullPath.c_str());*/
+	else
+	{
+		throw dbg::SDL_Exception("Unsupported image format: " + fileFormat);
+	}
+
 	if(!result)
 	{
 		throw dbg::SDL_Exception("Failed to load image: " + fullPath);
