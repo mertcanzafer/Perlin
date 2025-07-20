@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(PerlinSDL)
 
 # Set Language standards
@@ -13,6 +13,20 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIGURATION>")
 
 # This assumes the SDL source is available in vendored/SDL
 add_subdirectory(vendored/SDL EXCLUDE_FROM_ALL)
+
+set(SDL3IMAGE_VENDORED ON CACHE BOOL "" FORCE)
+set(SDL3IMAGE_BACKEND_STB ON CACHE BOOL "" FORCE)
+set(SDL3IMAGE_AVIF OFF CACHE BOOL "" FORCE)
+set(SDL3IMAGE_JXL OFF CACHE BOOL "" FORCE) # Also disable JPEG XL
+set(AVIF OFF CACHE BOOL "" FORCE) # Alternative flag name
+set(JXL OFF CACHE BOOL "" FORCE) # Alternative flag name
+
+# Add SDL_image (SDL3_image) subdirectory
+add_subdirectory(vendored/SDL_image EXCLUDE_FROM_ALL)
+
+set(GLM_TEST_ENABLE OFF CACHE BOOL "" FORCE)
+set(GLM_INSTALL OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # optional but safe
 
 # FetchContent for glm
 include(FetchContent)

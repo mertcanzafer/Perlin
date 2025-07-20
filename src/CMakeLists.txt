@@ -1,4 +1,4 @@
-# set soruce files
+# set source files
 
 set(SOURCES
     main.cpp
@@ -19,6 +19,9 @@ target_link_libraries(PerlinSDL PRIVATE SDL3::SDL3)
 
 # Link to glm headers
 target_link_libraries(PerlinSDL PRIVATE glm::glm)
+
+# Link to sdl_image
+target_link_libraries(PerlinSDL PRIVATE SDL3_image::SDL3_image)
 
 # Copy the content folder to output dir.
 add_custom_command(TARGET PerlinSDL POST_BUILD

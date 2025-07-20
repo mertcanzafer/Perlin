@@ -2,6 +2,8 @@
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_video.h>
 
+#include <SDL3_image\sdl_image.h>
+
 #include "Exception.h"
 #include <array>
 #include <string>
@@ -46,6 +48,7 @@ private:
 
     SDL_Surface* m_Surface;
 
+private:
     // Private Methods
     void Clean();
     SDL_GPUShader* LoadShader(SDL_GPUDevice* device,
@@ -60,4 +63,5 @@ private:
     void InitializeGPUResources(const std::array<struct VertexData,4>& vertices, const std::array<Uint16, 6>& indices);
 
     SDL_Surface* LoadImage(const std::string& fileName, int desirecChannels);
+    SDL_Texture* LoadImage(const std::string& fileName);
 };
