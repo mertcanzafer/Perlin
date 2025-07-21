@@ -1,6 +1,6 @@
 #include "Exception.h"
 
-namespace dbg {
+namespace PERLIN_UTIL::dbg {
 	SDL_Exception::SDL_Exception(const std::string& message) : std::runtime_error(message + "\n" + SDL_GetError()){}
 	
 	void reportAssertionFailure(const char* expression, const char* file, int line)

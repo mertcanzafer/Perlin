@@ -7,6 +7,8 @@ static SDL_GPUBuffer* g_IndexBuffer = nullptr;
 static SDL_GPUTexture* g_Texture = nullptr;
 static SDL_GPUSampler* g_Sampler = nullptr;
 
+namespace PDBG = PERLIN_UTIL::dbg;
+
 struct VertexData
 {
 	glm::vec3 position;
@@ -42,13 +44,13 @@ void App::InitSDL()
 		InitializeAssetLoader();
 
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		throw dbg::SDL_Exception("Failed to initialize SDL");
+		throw PDBG::SDL_Exception("Failed to initialize SDL");
 	}
 
 	 m_Windows[0] = SDL_CreateWindow(
 		"SDL Window", m_Width, m_Height, SDL_WINDOW_RESIZABLE);
 	if (!m_Windows[0]) {
-		throw dbg::SDL_Exception("Failed to create window");
+		throw PDBG::SDL_Exception("Failed to create window");
 	}
 
 	m_Device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV |
@@ -57,7 +59,7 @@ void App::InitSDL()
 
 	if (!SDL_ClaimWindowForGPUDevice(m_Device, m_Windows[0]))
 	{
-		throw dbg::SDL_Exception("Failed to claim window for GPU device");
+		throw PDBG::SDL_Exception("Failed to claim window for GPU device");
 	}
 
 	std::string vShaderName = "TexturedQuad.vert";
@@ -67,19 +69,19 @@ void App::InitSDL()
 	m_VertexShader = LoadShader(m_Device, vShaderName, 0, 0, 0, 0);
 
 	if (!m_VertexShader) {
-		throw dbg::SDL_Exception("Failed to vertex load shader");
+		throw PDBG::SDL_Exception("Failed to vertex load shader");
 	}
 
 	m_FragmentShader = LoadShader(m_Device, fShaderName, 1, 0, 0, 0);
 
 	if (!m_FragmentShader) {
-		throw dbg::SDL_Exception("Failed to load fragment shader");
+		throw PDBG::SDL_Exception("Failed to load fragment shader");
 	}
 
 	// Load texture data
 	m_Surface = LoadImage("ravioli_inverted.bmp", 4);
 	if(!m_Surface) {
-		throw dbg::SDL_Exception("Failed to load image");
+		throw PDBG::SDL_Exception("Failed to load image");
 	}
 }
 
@@ -148,7 +150,7 @@ void App::OnCreate()
 
 	m_Pipeline  = SDL_CreateGPUGraphicsPipeline(m_Device,&pipelineCreateInfo);
 	if (!m_Pipeline) {
-		throw dbg::SDL_Exception("Failed to create graphics pipeline");
+		throw PDBG::SDL_Exception("Failed to create graphics pipeline");
 	}
 
 	// Create vertex buffer data
@@ -183,7 +185,7 @@ void App::OnCreate()
 	SDL_GPUSampler* sampler = SDL_CreateGPUSampler(m_Device, &samplerCreateInfo);
 	if(!sampler)
 	{
-		throw dbg::SDL_Exception("Failed to create GPU sampler");
+		throw PDBG::SDL_Exception("Failed to create GPU sampler");
 	}
 	g_Sampler = sampler;
 }
@@ -205,7 +207,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 
 	SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(m_Device, &bufferCreateInfo);
 	if (!vertexBuffer)
-		throw dbg::SDL_Exception("Couldn't create GPU vertex buffer.");
+		throw PDBG::SDL_Exception("Couldn't create GPU vertex buffer.");
 	g_VertexBuffer = vertexBuffer;
 
 	// Set the vertex buffer name
@@ -218,7 +220,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 
 	SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(m_Device, &indexBufferCreateInfo);
 	if (!indexBuffer)
-		throw dbg::SDL_Exception("Couldn't create GPU index buffer.");
+		throw PDBG::SDL_Exception("Couldn't create GPU index buffer.");
 	g_IndexBuffer = indexBuffer;
 
 	// Set the Index buffer name
@@ -236,7 +238,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 
 	SDL_GPUTexture* texture = SDL_CreateGPUTexture(m_Device, &textureCreateInfo);
 	if (!texture)
-		throw dbg::SDL_Exception("Failed to create GPU texture");
+		throw PDBG::SDL_Exception("Failed to create GPU texture");
 	g_Texture = texture;
 
 	// Set the texture name
@@ -252,7 +254,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 	void* transferData = SDL_MapGPUTransferBuffer(m_Device, transferBuffer, false);
 
 	if (!transferData)
-		throw dbg::SDL_Exception("Transfering data went wrong!");
+		throw PDBG::SDL_Exception("Transfering data went wrong!");
 
 	// Copy the vertex and index buffer
 	SDL_memcpy(transferData, vertices.data(), sizeof(vertices));
@@ -270,11 +272,11 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 
 	SDL_GPUTransferBuffer* textureTransferBuffer = SDL_CreateGPUTransferBuffer(m_Device, &textureTransferBuffCreateInfo);
 	if (!textureTransferBuffer)
-		throw dbg::SDL_Exception("Failed to create GPU transfer buffer for texture");
+		throw PDBG::SDL_Exception("Failed to create GPU transfer buffer for texture");
 
 	void* textureTransferData = SDL_MapGPUTransferBuffer(m_Device, textureTransferBuffer, false);
 	if (!textureTransferData)
-		throw dbg::SDL_Exception("Failed to map GPU transfer buffer for texture");
+		throw PDBG::SDL_Exception("Failed to map GPU transfer buffer for texture");
 	// Copy the texture data into the transfer buffer
 	SDL_memcpy(textureTransferData, m_Surface->pixels, (static_cast<size_t>(m_Surface->w) * m_Surface->h) * 4);
 	SDL_UnmapGPUTransferBuffer(m_Device, textureTransferBuffer);
@@ -282,10 +284,10 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 	// Upload the transfer data to the vertex buffer
 	SDL_GPUCommandBuffer* uploadCmdBuf = SDL_AcquireGPUCommandBuffer(m_Device);
 	if (!uploadCmdBuf)
-		throw dbg::SDL_Exception("Failed to acquire GPU command buffer for upload");
+		throw PDBG::SDL_Exception("Failed to acquire GPU command buffer for upload");
 	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(uploadCmdBuf);
 	if (!copyPass)
-		throw dbg::SDL_Exception("Failed to begin GPU copy pass");
+		throw PDBG::SDL_Exception("Failed to begin GPU copy pass");
 
 	SDL_GPUTransferBufferLocation vTransferLocation{};
 	vTransferLocation.transfer_buffer = transferBuffer,
@@ -325,7 +327,7 @@ void App::InitializeGPUResources(const std::array<struct VertexData, 4>& vertice
 	SDL_EndGPUCopyPass(copyPass);
 
 	if (!SDL_SubmitGPUCommandBuffer(uploadCmdBuf))
-		throw dbg::SDL_Exception("Failed to submit GPU command buffer for upload");
+		throw PDBG::SDL_Exception("Failed to submit GPU command buffer for upload");
 
 	SDL_DestroySurface(m_Surface);
 	SDL_ReleaseGPUTransferBuffer(m_Device, transferBuffer);
@@ -337,14 +339,14 @@ void App::SubmitRenderCommands()
 	// Set command buffer for GPU device
 	SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(m_Device);
 	if (!commandBuffer) {
-		throw dbg::SDL_Exception("Failed to acquire GPU command buffer");
+		throw PDBG::SDL_Exception("Failed to acquire GPU command buffer");
 	}
 
 	// Create a swapchain of textures
 	SDL_GPUTexture* swapchain;
 	if (!SDL_WaitAndAcquireGPUSwapchainTexture(commandBuffer, m_Windows[0], &swapchain, nullptr, nullptr))
 	{
-		throw dbg::SDL_Exception("Failed to acquire swapchain texture");
+		throw PDBG::SDL_Exception("Failed to acquire swapchain texture");
 	}
 
 	if (swapchain != nullptr)
@@ -388,7 +390,7 @@ void App::SubmitRenderCommands()
 
 	if (!SDL_SubmitGPUCommandBuffer(commandBuffer))
 	{
-		throw dbg::SDL_Exception("Failed to submit GPU command buffer");
+		throw PDBG::SDL_Exception("Failed to submit GPU command buffer");
 	}
 }
 
@@ -461,7 +463,7 @@ SDL_GPUShader* App::LoadShader
 	}
 	else
 	{
-		throw dbg::SDL_Exception("Unsupported shader file extension");
+		throw PDBG::SDL_Exception("Unsupported shader file extension");
 	}
 
 	std::ostringstream fs;
@@ -503,14 +505,14 @@ SDL_GPUShader* App::LoadShader
 	std::ifstream shaderFile{ fullPath,std::ios::binary | std::ios::ate };
 	if (!shaderFile)
 	{
-		throw dbg::SDL_Exception("Failed to open shader file: " + fullPath);
+		throw PDBG::SDL_Exception("Failed to open shader file: " + fullPath);
 		return nullptr;
 	}
 
 	std::streamsize codeSize = shaderFile.tellg();
 	if (codeSize <= 0)
 	{
-		throw dbg::SDL_Exception("Shader file is empty or could not determine size: " + fullPath);
+		throw PDBG::SDL_Exception("Shader file is empty or could not determine size: " + fullPath);
 		return nullptr;
 	}
 
@@ -518,7 +520,7 @@ SDL_GPUShader* App::LoadShader
 	std::vector<char> code(codeSize);
 	if (!shaderFile.read(code.data(), codeSize))
 	{
-		throw dbg::SDL_Exception("Failed to read shader file: " + fullPath);
+		throw PDBG::SDL_Exception("Failed to read shader file: " + fullPath);
 		return nullptr;
 	}
 
@@ -538,7 +540,7 @@ SDL_GPUShader* App::LoadShader
 
 	if (!shader)
 	{
-		throw dbg::SDL_Exception("Failed to create shader from file: " + fullPath);
+		throw PDBG::SDL_Exception("Failed to create shader from file: " + fullPath);
 		return nullptr;
 	}
 
@@ -573,12 +575,12 @@ SDL_Surface* App::LoadImage(const std::string& fileName, int desirecChannels)
 		result = SDL_LoadWEBP(fullPath.c_str());*/
 	else
 	{
-		throw dbg::SDL_Exception("Unsupported image format: " + fileFormat);
+		throw PDBG::SDL_Exception("Unsupported image format: " + fileFormat);
 	}
 
 	if(!result)
 	{
-		throw dbg::SDL_Exception("Failed to load image: " + fullPath);
+		throw PDBG::SDL_Exception("Failed to load image: " + fullPath);
 	}
 
 	if (desirecChannels == 4)
@@ -597,7 +599,7 @@ SDL_Surface* App::LoadImage(const std::string& fileName, int desirecChannels)
 		if (!convertedSurface)
 		{
 			SDL_DestroySurface(result);
-			throw dbg::SDL_Exception("Failed to convert surface to desired pixel format");
+			throw PDBG::SDL_Exception("Failed to convert surface to desired pixel format");
 		}
 		SDL_DestroySurface(result);
 		result = convertedSurface;

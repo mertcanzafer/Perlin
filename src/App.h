@@ -63,5 +63,4 @@ private:
     void InitializeGPUResources(const std::array<struct VertexData,4>& vertices, const std::array<Uint16, 6>& indices);
 
     SDL_Surface* LoadImage(const std::string& fileName, int desirecChannels);
-    SDL_Texture* LoadImage(const std::string& fileName);
 };

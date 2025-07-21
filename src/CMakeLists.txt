@@ -4,11 +4,13 @@ set(SOURCES
     main.cpp
     Exception.cpp
     App.cpp
+    ThreadPool.cpp
 )
 
 set(HEADERS
     Exception.h
     App.h
+    ThreadPool.h
 )
 
 # Create your game executable target and put everything to executable
